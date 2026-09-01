@@ -43,9 +43,11 @@ class ProfileTab(QWidget):
         )
 
         save_button = QPushButton("Salvar")
+        save_button.setObjectName("primaryButton")
         save_button.clicked.connect(self._save)
 
         form = QFormLayout()
+        form.setSpacing(10)
         form.addRow("Nome", self.name_edit)
         form.addRow("Email", self.email_edit)
         form.addRow("Telefone", self.phone_edit)
@@ -56,8 +58,11 @@ class ProfileTab(QWidget):
         form.addRow(self.profile_summary_edit)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(14)
         layout.addLayout(form)
         layout.addWidget(save_button)
+        layout.addStretch()
 
         self._load()
 
