@@ -1,99 +1,46 @@
-# ==============================================================================
-# docker-compose.yml - Orquestração Job Automation
-# Containers: job-app (PyQt6) + ollama (IA)
-# ==============================================================================
-
 services:
-  # ============================================================================
-  # Container 1: Python App (PyQt6)
-  # ============================================================================
-  job-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    
-    container_name: job-automation-app
-    
-    # Configurações de Display (PyQt6 renderiza na tela)
-    environment:
-      - DISPLAY=host.docker.internal:0
-      - QT_QPA_PLATFORM=xcb
-      - OLLAMA_HOST=http://ollama:11434
-      - LOG_LEVEL=INFO
-      - PYTHONUNBUFFERED=1
-    
-    # Volumes (compartilhamento de arquivos)
-    volumes:
-      # Código (hot-reload)
-      - ./src:/app/src
-      
-      # Dados (banco de dados, logs)
-      - ./data:/app/data
-      
-      # CVs personalizados
-      - ./personalized_cvs:/app/personalized_cvs
-      
-      # Logs
-      - ./logs:/app/logs
-      
-      # X11 Display
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    
-    # Dependências
-    depends_on:
-      ollama:
-        condition: service_healthy
-    
-    # Rede
-    networks:
-      - job-network
-    
-    # Modo interativo
-    stdin_open: true
-    tty: true
-    
-    # Restart
-    restart: unless-stopped
-
-  # ============================================================================
-  # Container 2: Ollama (IA Local)
-  # ============================================================================
   ollama:
     image: ollama/ollama:latest
-    
     container_name: ollama-server
-    
     ports:
       - "11434:11434"
-    
     volumes:
       - ollama_data:/root/.ollama
-    
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
-    
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    
     networks:
       - job-network
-    
-    restart: unless-stopped
 
-# ============================================================================
-# Redes
-# ============================================================================
+  job-automation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: job-automation-app
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=gemma2:9b
+      - LOG_LEVEL=INFO
+    networks:
+      - job-network
+    stdin_open: false
+    tty: false
+    restart: "no"
+
 networks:
   job-network:
     driver: bridge
 
-# ============================================================================
-# Volumes
-# ============================================================================
 volumes:
   ollama_data:
     driver: local
