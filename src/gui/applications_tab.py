@@ -36,6 +36,8 @@ class ApplicationsTab(QWidget):
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for col in range(2, len(COLUMNS)):
+            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -59,6 +61,7 @@ class ApplicationsTab(QWidget):
                 self.table.setItem(row, 2, QTableWidgetItem(score))
 
                 status_combo = QComboBox()
+                status_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
                 status_combo.addItems([status.value for status in ApplicationStatus])
                 status_combo.setCurrentText(application.status.value)
                 status_combo.currentTextChanged.connect(
@@ -81,6 +84,8 @@ class ApplicationsTab(QWidget):
                     lambda _checked, app_id=application.id: self._draft_email(app_id)
                 )
                 self.table.setCellWidget(row, 5, email_button)
+
+            self.table.resizeColumnsToContents()
 
     def _update_status(self, application_id: int, status_value: str) -> None:
         with get_session() as session:
