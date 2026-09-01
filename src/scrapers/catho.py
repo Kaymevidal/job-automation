@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.core.constants import ScraperSource
 from src.core.logger import logger
 from src.database.models import Vacancy
-from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, parse_experience_level, slugify
+from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, detect_work_mode, parse_experience_level, slugify
 
 BASE_URL = "https://www.catho.com.br"
 DEFAULT_LISTING_URL = f"{BASE_URL}/vagas/"
@@ -50,6 +50,7 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
         "title": link.get_text(separator=" ", strip=True),
         "company": company_el.get_text(strip=True) if company_el else "Confidencial",
         "location": _location_text(card),
+        "work_mode": detect_work_mode(card.get_text()),
         "url": urljoin(BASE_URL, link["href"]),
         "description": None,
         "experience_level": parse_experience_level(card.get_text()),

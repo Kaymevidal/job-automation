@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 from src.core.constants import ScraperSource
 from src.core.logger import logger
 from src.database.models import Vacancy
-from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, parse_br_date, parse_experience_level, slugify
+from src.scrapers.br_common import (
+    REQUEST_HEADERS,
+    REQUEST_TIMEOUT,
+    detect_work_mode,
+    parse_br_date,
+    parse_experience_level,
+    slugify,
+)
 
 BASE_URL = "https://www.vagas.com.br"
 DEFAULT_LISTING_URL = f"{BASE_URL}/vagas-de-todas-as-areas"
@@ -35,14 +42,18 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
     level_el = card.select_one(".nivelVaga")
     date_el = card.select_one(".data-publicacao")
 
+    title = link.get_text(separator=" ", strip=True)
+    description = description_el.get_text(separator=" ", strip=True) if description_el else None
+
     return {
         "source": ScraperSource.VAGAS_COM_BR,
         "external_id": link["data-id-vaga"],
-        "title": link.get_text(separator=" ", strip=True),
+        "title": title,
         "company": company_el.get_text(strip=True) if company_el else "Confidencial",
         "location": location,
+        "work_mode": detect_work_mode(title, location, description),
         "url": urljoin(BASE_URL, link["href"]),
-        "description": description_el.get_text(separator=" ", strip=True) if description_el else None,
+        "description": description,
         "experience_level": parse_experience_level(level_el.get_text() if level_el else None),
         "posted_at": parse_br_date(date_el.get_text() if date_el else None),
     }

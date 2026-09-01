@@ -15,13 +15,13 @@ from PyQt6.QtWidgets import (
 )
 from sqlalchemy import or_, select
 
-from src.core.constants import ScraperSource
+from src.core.constants import ScraperSource, WorkMode
 from src.database.database import get_session
 from src.database.models import Vacancy
 from src.gui.search_worker import SearchWorker
 
-COLUMNS = ["Titulo", "Empresa", "Local", "Fonte", "Score", "Abrir"]
-COLUMN_WIDTHS = {2: 160, 3: 100, 4: 70, 5: 85}
+COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Abrir"]
+COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 85}
 
 SOURCE_LABELS = {
     ScraperSource.REMOTEOK: "RemoteOK",
@@ -32,6 +32,12 @@ SOURCE_LABELS = {
     ScraperSource.INDEED: "Indeed",
     ScraperSource.GLASSDOOR: "Glassdoor",
     ScraperSource.MANUAL: "Manual",
+}
+
+WORK_MODE_LABELS = {
+    WorkMode.REMOTE: "Remoto",
+    WorkMode.HYBRID: "Hibrido",
+    WorkMode.ONSITE: "Presencial",
 }
 
 SCORE_FILTERS = [
@@ -69,10 +75,17 @@ class VacanciesTab(QWidget):
             self.min_score_combo.addItem(label, value)
         self.min_score_combo.currentIndexChanged.connect(self.refresh)
 
+        self.work_mode_combo = QComboBox()
+        self.work_mode_combo.addItem("Qualquer modalidade", None)
+        for mode, label in WORK_MODE_LABELS.items():
+            self.work_mode_combo.addItem(label, mode)
+        self.work_mode_combo.currentIndexChanged.connect(self.refresh)
+
         filter_bar = QHBoxLayout()
         filter_bar.addWidget(self.search_edit, 1)
         filter_bar.addWidget(self.search_button)
         filter_bar.addWidget(self.source_combo)
+        filter_bar.addWidget(self.work_mode_combo)
         filter_bar.addWidget(self.min_score_combo)
 
         self.table = QTableWidget(0, len(COLUMNS))
@@ -115,6 +128,10 @@ class VacanciesTab(QWidget):
             if source is not None:
                 query = query.where(Vacancy.source == source)
 
+            work_mode = self.work_mode_combo.currentData()
+            if work_mode is not None:
+                query = query.where(Vacancy.work_mode == work_mode)
+
             min_score = self.min_score_combo.currentData()
             if min_score is not None:
                 query = query.where(Vacancy.compatibility_score >= min_score)
@@ -126,7 +143,8 @@ class VacanciesTab(QWidget):
             for row, vacancy in enumerate(vacancies):
                 score = f"{vacancy.compatibility_score:.2f}" if vacancy.compatibility_score is not None else "-"
                 source_label = SOURCE_LABELS.get(vacancy.source, vacancy.source.value)
-                values = [vacancy.title, vacancy.company, vacancy.location or "-", source_label, score]
+                mode_label = WORK_MODE_LABELS.get(vacancy.work_mode, "-")
+                values = [vacancy.title, vacancy.company, vacancy.location or "-", mode_label, source_label, score]
                 for col, value in enumerate(values):
                     self.table.setItem(row, col, QTableWidgetItem(value))
 

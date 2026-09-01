@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.core.constants import ScraperSource
+from src.core.constants import ScraperSource, WorkMode
 from src.core.logger import logger
 from src.database.models import Vacancy
 
@@ -46,6 +46,7 @@ def parse_vacancy(record: dict) -> dict:
         "title": record.get("position", ""),
         "company": record.get("company", ""),
         "location": record.get("location") or "Remote",
+        "work_mode": WorkMode.REMOTE,
         "url": record.get("url", ""),
         "description": _clean_description(record.get("description")),
         "salary_range": _salary_range(record),

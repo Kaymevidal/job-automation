@@ -21,8 +21,8 @@ from src.database.database import get_session
 from src.database.models import Application, User, Vacancy
 from src.gui.email_lookup_worker import EmailLookupWorker
 
-COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta", "E-mail"]
-COLUMN_WIDTHS = {2: 70, 3: 150, 4: 100, 5: 160}
+COLUMNS = ["Vaga", "Empresa", "Score", "Status", "E-mail", "Carta", "Rascunho"]
+COLUMN_WIDTHS = {2: 70, 3: 130, 4: 190, 5: 100, 6: 160}
 
 
 class ApplicationsTab(QWidget):
@@ -74,21 +74,23 @@ class ApplicationsTab(QWidget):
                 )
                 self.table.setCellWidget(row, 3, status_combo)
 
+                self.table.setItem(row, 4, QTableWidgetItem(vacancy.contact_email or "-"))
+
                 if application.cover_letter_path:
                     letter_button = QPushButton("Abrir PDF")
                     letter_button.clicked.connect(
                         lambda _checked, path=application.cover_letter_path: self._open_file(path)
                     )
-                    self.table.setCellWidget(row, 4, letter_button)
+                    self.table.setCellWidget(row, 5, letter_button)
                 else:
-                    self.table.setItem(row, 4, QTableWidgetItem("-"))
+                    self.table.setItem(row, 5, QTableWidgetItem("-"))
 
                 email_label = "Rascunho criado" if application.email_drafted_at else "Criar rascunho"
                 email_button = QPushButton(email_label)
                 email_button.clicked.connect(
                     lambda _checked, app_id=application.id: self._draft_email(app_id)
                 )
-                self.table.setCellWidget(row, 5, email_button)
+                self.table.setCellWidget(row, 6, email_button)
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)

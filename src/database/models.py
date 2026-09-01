@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from src.core.constants import ApplicationStatus, ExperienceLevel, ScraperSource
+from src.core.constants import ApplicationStatus, ExperienceLevel, ScraperSource, WorkMode
 
 
 def utcnow() -> datetime:
@@ -38,6 +38,7 @@ class Vacancy(Base):
     title: Mapped[str] = mapped_column(String(255))
     company: Mapped[str] = mapped_column(String(255))
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    work_mode: Mapped[WorkMode | None] = mapped_column(nullable=True)
     url: Mapped[str] = mapped_column(String(1000))
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[ScraperSource] = mapped_column()

@@ -19,6 +19,12 @@ class ExperienceLevel(str, Enum):
     LEAD = "lead"
 
 
+class WorkMode(str, Enum):
+    REMOTE = "remote"
+    HYBRID = "hybrid"
+    ONSITE = "onsite"
+
+
 class ScraperSource(str, Enum):
     REMOTEOK = "remoteok"
     VAGAS_COM_BR = "vagas_com_br"

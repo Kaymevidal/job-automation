@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timezone
 
-from src.core.constants import ExperienceLevel
+from src.core.constants import ExperienceLevel, WorkMode
 
 REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -41,6 +41,20 @@ def parse_experience_level(text: str | None) -> ExperienceLevel | None:
         if keyword in normalized:
             return level
     return None
+
+
+_HYBRID_KEYWORDS = ("hibrido", "hybrid")
+_REMOTE_KEYWORDS = ("home office", "remoto", "remote", "trabalho remoto")
+
+
+def detect_work_mode(*texts: str | None) -> WorkMode:
+    normalized = _strip_accents(" ".join(t for t in texts if t)).lower()
+
+    if any(keyword in normalized for keyword in _HYBRID_KEYWORDS):
+        return WorkMode.HYBRID
+    if any(keyword in normalized for keyword in _REMOTE_KEYWORDS):
+        return WorkMode.REMOTE
+    return WorkMode.ONSITE
 
 
 def parse_br_date(text: str | None) -> datetime | None:
