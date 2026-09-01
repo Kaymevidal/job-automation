@@ -50,6 +50,7 @@ def parse_vacancy(record: dict) -> dict:
         "description": _clean_description(record.get("description")),
         "salary_range": _salary_range(record),
         "posted_at": posted_at,
+        "tags": ",".join(record.get("tags") or []) or None,
     }
 
 

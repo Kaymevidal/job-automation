@@ -43,6 +43,7 @@ class Vacancy(Base):
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     requirements: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[str | None] = mapped_column(String(500), nullable=True)
     experience_level: Mapped[ExperienceLevel | None] = mapped_column(nullable=True)
     salary_range: Mapped[str | None] = mapped_column(String(100), nullable=True)
     compatibility_score: Mapped[float | None] = mapped_column(nullable=True)

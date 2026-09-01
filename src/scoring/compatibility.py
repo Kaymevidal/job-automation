@@ -1,3 +1,5 @@
+import re
+
 from ollama import Client
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -8,6 +10,23 @@ from src.core.logger import logger
 from src.database.models import User, Vacancy
 
 _client = Client(host=OLLAMA_HOST)
+
+_WORD_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9+#.-]{1,}")
+_STOPWORDS = {
+    "and", "or", "the", "with", "for", "in", "of", "a", "an", "to", "on",
+    "using", "experience", "years", "year", "work", "working", "team",
+}
+
+
+def _keywords(text: str) -> set[str]:
+    words = _WORD_RE.findall(text.lower())
+    return {w for w in words if w not in _STOPWORDS and len(w) > 2}
+
+
+def is_plausible_match(profile_summary: str, vacancy: Vacancy) -> bool:
+    profile_keywords = _keywords(profile_summary)
+    vacancy_keywords = _keywords(vacancy.title) | _keywords(vacancy.tags or "")
+    return bool(profile_keywords & vacancy_keywords)
 
 PROMPT_TEMPLATE = """You are a recruiting assistant. Compare the candidate profile with the job \
 posting below and judge how compatible they are.
@@ -57,7 +76,15 @@ def score_pending_vacancies(session: Session, user: User, limit: int = 20) -> in
     ).scalars().all()
 
     scored = 0
+    filtered_out = 0
     for vacancy in pending:
+        if not is_plausible_match(user.profile_summary, vacancy):
+            vacancy.compatibility_score = 0.0
+            session.commit()
+            filtered_out += 1
+            logger.info(f"Vacancy {vacancy.id} ({vacancy.title}): pre-filtered, no keyword overlap")
+            continue
+
         try:
             result = score_compatibility(user.profile_summary, vacancy)
         except Exception as e:
@@ -69,5 +96,5 @@ def score_pending_vacancies(session: Session, user: User, limit: int = 20) -> in
         scored += 1
         logger.info(f"Vacancy {vacancy.id} ({vacancy.title}): score={result.score:.2f} - {result.reasoning}")
 
-    logger.info(f"Scored {scored} of {len(pending)} pending vacancies")
+    logger.info(f"Scored {scored} and pre-filtered {filtered_out} of {len(pending)} pending vacancies")
     return scored
