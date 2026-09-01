@@ -6,8 +6,6 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QHeaderView,
-    QInputDialog,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -18,8 +16,8 @@ from sqlalchemy import select
 
 from src.core.constants import ApplicationStatus
 from src.database.database import get_session
-from src.database.models import Application, User, Vacancy
-from src.gui.email_lookup_worker import EmailLookupWorker
+from src.database.models import Application, Vacancy
+from src.gui.email_draft_controller import EmailDraftController
 
 COLUMNS = ["Vaga", "Empresa", "Score", "Status", "E-mail", "Carta", "Rascunho"]
 COLUMN_WIDTHS = {2: 70, 3: 130, 4: 190, 5: 100, 6: 160}
@@ -46,7 +44,8 @@ class ApplicationsTab(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self.table)
 
-        self._email_workers: list[EmailLookupWorker] = []
+        self._draft_controller = EmailDraftController(self)
+        self._draft_controller.finished.connect(lambda _success: self.refresh())
 
         self.refresh()
 
@@ -102,61 +101,7 @@ class ApplicationsTab(QWidget):
 
     def _draft_email(self, application_id: int) -> None:
         button = self.sender()
-
-        with get_session() as session:
-            vacancy = session.get(Vacancy, session.get(Application, application_id).vacancy_id)
-            company = vacancy.company
-            title = vacancy.title
-            existing_email = vacancy.contact_email
-
-        if existing_email:
-            self._confirm_and_draft(application_id, existing_email)
-            return
-
-        if isinstance(button, QPushButton):
-            button.setEnabled(False)
-            button.setText("Buscando e-mail...")
-
-        worker = EmailLookupWorker(company, title)
-        worker.finished_ok.connect(
-            lambda email, app_id=application_id, btn=button: self._on_email_found(app_id, email, btn)
-        )
-        self._email_workers.append(worker)
-        worker.start()
-
-    def _on_email_found(self, application_id: int, email: str, button: QPushButton | None) -> None:
-        if isinstance(button, QPushButton):
-            button.setEnabled(True)
-            button.setText("Criar rascunho")
-
-        self._confirm_and_draft(application_id, email)
-
-    def _confirm_and_draft(self, application_id: int, suggested_email: str) -> None:
-        with get_session() as session:
-            application = session.get(Application, application_id)
-            vacancy = session.get(Vacancy, application.vacancy_id)
-            user = session.get(User, application.user_id)
-
-            to_email, ok = QInputDialog.getText(
-                self,
-                "E-mail de contato",
-                f"E-mail para candidatura em {vacancy.company}:"
-                + ("" if suggested_email else "\n(nao encontrado automaticamente, digite manualmente)"),
-                text=suggested_email,
-            )
-            if not ok or not to_email.strip():
-                return
-            to_email = to_email.strip()
-            vacancy.contact_email = to_email
-
-            try:
-                from src.integrations.outlook import draft_application_email
-                draft_application_email(application, vacancy, user, to_email)
-            except Exception as e:
-                QMessageBox.critical(self, "Erro ao criar rascunho", str(e))
-                return
-
-        self.refresh()
+        self._draft_controller.start(application_id, button if isinstance(button, QPushButton) else None)
 
     @staticmethod
     def _open_file(path: str) -> None:

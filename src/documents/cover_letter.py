@@ -101,6 +101,42 @@ def render_cover_letter_pdf(text: str, vacancy: Vacancy) -> Path:
     return output_path
 
 
+def get_or_create_application(session: Session, user: User, vacancy: Vacancy) -> Application:
+    existing = session.execute(
+        select(Application).where(
+            Application.user_id == user.id,
+            Application.vacancy_id == vacancy.id,
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        return existing
+
+    application = Application(
+        user_id=user.id,
+        vacancy_id=vacancy.id,
+        status=ApplicationStatus.PENDING,
+        resume_used_path=user.resume_path,
+    )
+    session.add(application)
+    session.commit()
+    logger.info(f"Application created for vacancy {vacancy.id} ({vacancy.title})")
+    return application
+
+
+def generate_cover_letter_for_application(session: Session, application: Application) -> None:
+    user = session.get(User, application.user_id)
+    vacancy = session.get(Vacancy, application.vacancy_id)
+
+    letter_text = generate_cover_letter_text(user, vacancy)
+    pdf_path = render_cover_letter_pdf(letter_text, vacancy)
+
+    application.cover_letter_path = str(pdf_path)
+    application.cover_letter_text = letter_text
+    session.commit()
+    logger.info(f"Cover letter generated for application {application.id}, vacancy {vacancy.id}")
+
+
 def generate_applications_for_top_matches(
     session: Session, user: User, min_score: float = MIN_COMPATIBILITY_SCORE
 ) -> int:

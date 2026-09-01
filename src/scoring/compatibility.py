@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.config import OLLAMA_HOST, OLLAMA_MODEL
+from src.core.constants import WorkMode
 from src.core.logger import logger
 from src.database.models import User, Vacancy
 
@@ -36,17 +37,26 @@ Candidate profile:
 
 Job title: {title}
 Company: {company}
+Location: {location}
 Job description:
 {description}
 
 Score compatibility from 0.0 (no match) to 1.0 (excellent match), considering \
 skills, seniority, and domain overlap. Respond with the score and a short \
-reasoning in one or two sentences."""
+reasoning in one or two sentences.
+
+Also classify the work mode as one of: "remote" (fully remote, home office, no \
+commute required), "hybrid" (mix of remote and in-office, e.g. explicitly says \
+hybrid or a number of in-office days per week), or "onsite" (fully in-person, \
+no remote work mentioned). Base this only on explicit statements in the title, \
+location, or description - if the posting gives no indication either way, \
+default to "onsite" since that is the norm on these job boards."""
 
 
 class CompatibilityResult(BaseModel):
     score: float = Field(ge=0, le=1)
     reasoning: str
+    work_mode: WorkMode
 
 
 def score_compatibility(profile_summary: str, vacancy: Vacancy) -> CompatibilityResult:
@@ -54,6 +64,7 @@ def score_compatibility(profile_summary: str, vacancy: Vacancy) -> Compatibility
         profile_summary=profile_summary,
         title=vacancy.title,
         company=vacancy.company,
+        location=vacancy.location or "(not provided)",
         description=vacancy.description or "(no description provided)",
     )
 
@@ -92,9 +103,13 @@ def score_pending_vacancies(session: Session, user: User, limit: int = 20) -> in
             continue
 
         vacancy.compatibility_score = result.score
+        vacancy.work_mode = result.work_mode
         session.commit()
         scored += 1
-        logger.info(f"Vacancy {vacancy.id} ({vacancy.title}): score={result.score:.2f} - {result.reasoning}")
+        logger.info(
+            f"Vacancy {vacancy.id} ({vacancy.title}): score={result.score:.2f}, "
+            f"work_mode={result.work_mode.value} - {result.reasoning}"
+        )
 
     logger.info(f"Scored {scored} and pre-filtered {filtered_out} of {len(pending)} pending vacancies")
     return scored

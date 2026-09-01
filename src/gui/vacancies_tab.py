@@ -17,11 +17,14 @@ from sqlalchemy import or_, select
 
 from src.core.constants import ScraperSource, WorkMode
 from src.database.database import get_session
-from src.database.models import Vacancy
+from src.database.models import Application, User, Vacancy
+from src.documents.cover_letter import get_or_create_application
+from src.gui.cover_letter_worker import CoverLetterWorker
+from src.gui.email_draft_controller import EmailDraftController
 from src.gui.search_worker import SearchWorker
 
-COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Abrir"]
-COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 85}
+COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Abrir", "Candidatura", "Rascunho"]
+COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 85, 7: 140, 8: 160}
 
 SOURCE_LABELS = {
     ScraperSource.REMOTEOK: "RemoteOK",
@@ -107,10 +110,23 @@ class VacanciesTab(QWidget):
         layout.addLayout(filter_bar)
         layout.addWidget(self.table)
 
+        self._draft_controller = EmailDraftController(self)
+        self._draft_controller.finished.connect(lambda _success: self.refresh())
+        self._cover_letter_workers: list[CoverLetterWorker] = []
+
         self.refresh()
 
     def refresh(self) -> None:
         with get_session() as session:
+            user = session.execute(select(User)).scalars().first()
+            applied_vacancy_ids = set()
+            if user is not None:
+                applied_vacancy_ids = set(
+                    session.execute(
+                        select(Application.vacancy_id).where(Application.user_id == user.id)
+                    ).scalars().all()
+                )
+
             query = select(Vacancy)
 
             search_text = self.search_edit.text().strip()
@@ -150,7 +166,23 @@ class VacanciesTab(QWidget):
 
                 open_button = QPushButton("Abrir")
                 open_button.clicked.connect(lambda _checked, url=vacancy.url: QDesktopServices.openUrl(QUrl(url)))
-                self.table.setCellWidget(row, len(COLUMNS) - 1, open_button)
+                self.table.setCellWidget(row, 6, open_button)
+
+                already_applied = vacancy.id in applied_vacancy_ids
+
+                apply_button = QPushButton("Ja adicionada" if already_applied else "+ Candidatura")
+                apply_button.setEnabled(user is not None and not already_applied)
+                apply_button.clicked.connect(
+                    lambda _checked, vacancy_id=vacancy.id: self._add_to_applications(vacancy_id)
+                )
+                self.table.setCellWidget(row, 7, apply_button)
+
+                draft_button = QPushButton("Gerar Rascunho")
+                draft_button.setEnabled(user is not None)
+                draft_button.clicked.connect(
+                    lambda _checked, vacancy_id=vacancy.id: self._generate_draft(vacancy_id)
+                )
+                self.table.setCellWidget(row, 8, draft_button)
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
@@ -178,3 +210,64 @@ class VacanciesTab(QWidget):
             self.refresh()
         else:
             QMessageBox.warning(self, "Erro na busca", message)
+
+    def _add_to_applications(self, vacancy_id: int) -> None:
+        button = self.sender()
+
+        with get_session() as session:
+            user = session.execute(select(User)).scalars().first()
+            if user is None:
+                QMessageBox.warning(self, "Sem perfil", "Cadastre seu perfil na aba Perfil primeiro.")
+                return
+
+            vacancy = session.get(Vacancy, vacancy_id)
+            get_or_create_application(session, user, vacancy)
+
+        if isinstance(button, QPushButton):
+            button.setText("Ja adicionada")
+            button.setEnabled(False)
+
+    def _generate_draft(self, vacancy_id: int) -> None:
+        button = self.sender()
+
+        with get_session() as session:
+            user = session.execute(select(User)).scalars().first()
+            if user is None:
+                QMessageBox.warning(self, "Sem perfil", "Cadastre seu perfil na aba Perfil primeiro.")
+                return
+            if not user.profile_summary:
+                QMessageBox.warning(self, "Perfil incompleto", "Preencha o resumo do perfil antes de gerar a carta.")
+                return
+
+            vacancy = session.get(Vacancy, vacancy_id)
+            application = get_or_create_application(session, user, vacancy)
+            application_id = application.id
+            has_letter = bool(application.cover_letter_text)
+
+        if isinstance(button, QPushButton):
+            button.setEnabled(False)
+            button.setText("Gerando carta...")
+
+        if has_letter:
+            self._on_cover_letter_ready(True, "", application_id, button)
+            return
+
+        worker = CoverLetterWorker(application_id)
+        worker.finished_ok.connect(
+            lambda success, message, app_id=application_id, btn=button:
+            self._on_cover_letter_ready(success, message, app_id, btn)
+        )
+        self._cover_letter_workers.append(worker)
+        worker.start()
+
+    def _on_cover_letter_ready(
+        self, success: bool, message: str, application_id: int, button: QPushButton | None
+    ) -> None:
+        if not success:
+            if isinstance(button, QPushButton):
+                button.setEnabled(True)
+                button.setText("Gerar Rascunho")
+            QMessageBox.critical(self, "Erro ao gerar carta", message)
+            return
+
+        self._draft_controller.start(application_id, button)
