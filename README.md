@@ -16,26 +16,43 @@ The system is split into two runtimes:
   a shared SQLite database.
 
 Both runtimes share the same codebase under `src/` and the same database.
+The scraper, scoring, and document generation modules are plain functions
+over a SQLAlchemy session with no Docker-specific dependency, so the GUI
+calls them directly instead of duplicating logic.
 
 ```
 src/
   core/
-    config.py       Environment configuration
-    constants.py     Domain enums and thresholds
-    logger.py        Logging setup (loguru)
+    config.py        Environment configuration
+    constants.py      Domain enums and thresholds
+    logger.py         Logging setup (loguru)
   database/
-    models.py         SQLAlchemy models
-    database.py        Engine, session management
-    migrations.py       Schema creation and status checks
-  main.py               Headless worker entrypoint
+    models.py          SQLAlchemy models
+    database.py         Engine, session management
+    migrations.py        Schema creation and status checks
+  scrapers/
+    remoteok.py           Fetches and persists vacancies from the RemoteOK API
+  scoring/
+    compatibility.py       Keyword pre-filter + Ollama compatibility scoring
+  documents/
+    cover_letter.py         Ollama cover letter generation, rendered to PDF
+  gui/
+    main_window.py           Tabs: Vagas, Candidaturas, Perfil
+    pipeline.py                Runs sync -> score -> generate on a QThread
+  main.py                Headless worker entrypoint (Docker)
+  gui_main.py            Desktop GUI entrypoint (Windows host)
 ```
 
 ## Data model
 
-- `User` — candidate profile
-- `Vacancy` — a scraped job posting, with source and compatibility score
-- `Application` — the link between a user and a vacancy, with status
-- `SchedulerJob` — scheduled/recurring jobs tracked by APScheduler
+- `User` — candidate profile, including `profile_summary` (free text used
+  for compatibility scoring)
+- `Vacancy` — a scraped job posting: source, tags, description, and
+  `compatibility_score`
+- `Application` — the link between a user and a vacancy, with status and
+  the generated cover letter path
+- `SchedulerJob` — scheduled/recurring jobs tracked by APScheduler (not
+  wired up yet; the pipeline currently runs on demand)
 
 ## Requirements
 
@@ -69,6 +86,17 @@ src/
    python test_imports.py
    ```
 
+4. Launch the desktop GUI (Windows host, requires PyQt6 from step 3):
+
+   ```
+   python -m src.gui_main
+   ```
+
+   Fill in the Perfil tab (name, email, and profile_summary) first — the
+   scoring step skips users with no profile_summary. The Vagas and
+   Candidaturas tabs read from the same database the Docker worker writes
+   to, so either side can run the pipeline.
+
 ## Dependencies
 
 Two requirement files exist because the GUI and Outlook integration only
@@ -93,6 +121,17 @@ Environment variables (see `.env.example`):
 
 ## Status
 
-Foundational layer only: configuration, logging, database models, and the
-worker entrypoint. Scraping, compatibility scoring, and document generation
-are not yet implemented.
+End-to-end pipeline working: RemoteOK scraping, keyword pre-filter +
+Ollama compatibility scoring, cover letter generation (PDF), and a PyQt6
+GUI to review vacancies, manage application status, and edit the profile.
+
+Known gaps:
+
+- Only one scraper source (RemoteOK); LinkedIn/Indeed/Glassdoor are
+  defined in `ScraperSource` but not implemented — Indeed in particular
+  sits behind a Cloudflare challenge that blocks plain HTTP scraping.
+- No resume generation, only cover letters — `resume_path` is a file the
+  user provides, not something the app builds.
+- `SchedulerJob`/APScheduler are not wired up; the pipeline runs only when
+  triggered (`docker compose up` or the GUI button).
+- Single local user only; the GUI's Perfil tab edits one profile row.
