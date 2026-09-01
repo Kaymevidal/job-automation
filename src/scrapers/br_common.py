@@ -1,0 +1,50 @@
+from datetime import datetime, timezone
+
+from src.core.constants import ExperienceLevel
+
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+}
+REQUEST_TIMEOUT = 15
+
+_LEVEL_KEYWORDS = [
+    ("estagio", ExperienceLevel.INTERN),
+    ("trainee", ExperienceLevel.INTERN),
+    ("junior", ExperienceLevel.JUNIOR),
+    ("pleno", ExperienceLevel.MID),
+    ("senior", ExperienceLevel.SENIOR),
+    ("especialista", ExperienceLevel.LEAD),
+    ("gerente", ExperienceLevel.LEAD),
+    ("diretor", ExperienceLevel.LEAD),
+]
+
+
+def _strip_accents(text: str) -> str:
+    replacements = str.maketrans("áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ", "aaaaeeiooouc" "AAAAEEIOOOUC")
+    return text.translate(replacements)
+
+
+def parse_experience_level(text: str | None) -> ExperienceLevel | None:
+    if not text:
+        return None
+
+    normalized = _strip_accents(text).lower()
+    for keyword, level in _LEVEL_KEYWORDS:
+        if keyword in normalized:
+            return level
+    return None
+
+
+def parse_br_date(text: str | None) -> datetime | None:
+    if not text:
+        return None
+
+    text = text.strip().lower()
+    if text in ("hoje", "ontem"):
+        return datetime.now(timezone.utc)
+
+    try:
+        return datetime.strptime(text, "%d/%m/%Y").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None

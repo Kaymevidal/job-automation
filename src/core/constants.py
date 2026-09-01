@@ -21,6 +21,9 @@ class ExperienceLevel(str, Enum):
 
 class ScraperSource(str, Enum):
     REMOTEOK = "remoteok"
+    VAGAS_COM_BR = "vagas_com_br"
+    INFOJOBS = "infojobs"
+    CATHO = "catho"
     LINKEDIN = "linkedin"
     INDEED = "indeed"
     GLASSDOOR = "glassdoor"

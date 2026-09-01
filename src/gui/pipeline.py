@@ -5,7 +5,7 @@ from src.database.database import get_session
 from src.database.models import User
 from src.documents.cover_letter import generate_applications_for_top_matches
 from src.scoring.compatibility import score_pending_vacancies
-from src.scrapers.remoteok import sync_vacancies
+from src.scrapers import sync_all
 
 
 class PipelineWorker(QThread):
@@ -15,7 +15,7 @@ class PipelineWorker(QThread):
     def run(self) -> None:
         try:
             with get_session() as session:
-                synced = sync_vacancies(session)
+                synced = sync_all(session)
             self.log.emit(f"{synced} vagas novas sincronizadas")
 
             with get_session() as session:

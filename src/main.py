@@ -9,7 +9,7 @@ from src.database.migrations import check_database_status, run_migrations
 from src.database.models import User
 from src.documents.cover_letter import generate_applications_for_top_matches
 from src.scoring.compatibility import score_pending_vacancies
-from src.scrapers.remoteok import sync_vacancies
+from src.scrapers import sync_all
 
 
 def main() -> int:
@@ -25,7 +25,7 @@ def main() -> int:
     logger.info(f"Database status: {status}")
 
     with get_session() as session:
-        sync_vacancies(session)
+        sync_all(session)
 
     with get_session() as session:
         users = session.execute(select(User)).scalars().all()
