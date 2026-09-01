@@ -2,8 +2,9 @@ import sys
 
 from src.core.config import APP_NAME, APP_VERSION
 from src.core.logger import log_startup, logger
-from src.database.database import check_connection
+from src.database.database import check_connection, get_session
 from src.database.migrations import check_database_status, run_migrations
+from src.scrapers.remoteok import sync_vacancies
 
 
 def main() -> int:
@@ -17,6 +18,9 @@ def main() -> int:
 
     status = check_database_status()
     logger.info(f"Database status: {status}")
+
+    with get_session() as session:
+        sync_vacancies(session)
 
     logger.info(f"{APP_NAME} v{APP_VERSION} finished")
     return 0
