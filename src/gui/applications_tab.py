@@ -21,6 +21,7 @@ from src.database.database import get_session
 from src.database.models import Application, User, Vacancy
 
 COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta", "E-mail"]
+COLUMN_WIDTHS = {2: 70, 3: 150, 4: 100, 5: 160}
 
 
 class ApplicationsTab(QWidget):
@@ -36,8 +37,9 @@ class ApplicationsTab(QWidget):
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for col in range(2, len(COLUMNS)):
-            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        for col, width in COLUMN_WIDTHS.items():
+            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+            self.table.setColumnWidth(col, width)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -85,7 +87,8 @@ class ApplicationsTab(QWidget):
                 )
                 self.table.setCellWidget(row, 5, email_button)
 
-            self.table.resizeColumnsToContents()
+            for col, width in COLUMN_WIDTHS.items():
+                self.table.setColumnWidth(col, width)
 
     def _update_status(self, application_id: int, status_value: str) -> None:
         with get_session() as session:
