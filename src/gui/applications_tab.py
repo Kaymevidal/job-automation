@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QHeaderView,
+    QInputDialog,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -16,9 +18,9 @@ from sqlalchemy import select
 
 from src.core.constants import ApplicationStatus
 from src.database.database import get_session
-from src.database.models import Application, Vacancy
+from src.database.models import Application, User, Vacancy
 
-COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta"]
+COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta", "E-mail"]
 
 
 class ApplicationsTab(QWidget):
@@ -69,10 +71,42 @@ class ApplicationsTab(QWidget):
                 else:
                     self.table.setItem(row, 4, QTableWidgetItem("-"))
 
+                email_label = "Rascunho criado" if application.email_drafted_at else "Criar rascunho"
+                email_button = QPushButton(email_label)
+                email_button.clicked.connect(
+                    lambda _checked, app_id=application.id: self._draft_email(app_id)
+                )
+                self.table.setCellWidget(row, 5, email_button)
+
     def _update_status(self, application_id: int, status_value: str) -> None:
         with get_session() as session:
             application = session.get(Application, application_id)
             application.status = ApplicationStatus(status_value)
+
+    def _draft_email(self, application_id: int) -> None:
+        with get_session() as session:
+            application = session.get(Application, application_id)
+            vacancy = session.get(Vacancy, application.vacancy_id)
+            user = session.get(User, application.user_id)
+
+            to_email = vacancy.contact_email
+            if not to_email:
+                to_email, ok = QInputDialog.getText(
+                    self, "E-mail de contato", f"E-mail para candidatura em {vacancy.company}:"
+                )
+                if not ok or not to_email.strip():
+                    return
+                to_email = to_email.strip()
+                vacancy.contact_email = to_email
+
+            try:
+                from src.integrations.outlook import draft_application_email
+                draft_application_email(application, vacancy, user, to_email)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro ao criar rascunho", str(e))
+                return
+
+        self.refresh()
 
     @staticmethod
     def _open_file(path: str) -> None:

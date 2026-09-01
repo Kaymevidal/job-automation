@@ -132,6 +132,7 @@ def generate_applications_for_top_matches(
             vacancy_id=vacancy.id,
             status=ApplicationStatus.PENDING,
             cover_letter_path=str(pdf_path),
+            cover_letter_text=letter_text,
             resume_used_path=user.resume_path,
         ))
         session.commit()
