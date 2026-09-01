@@ -19,6 +19,7 @@ from sqlalchemy import select
 from src.core.constants import ApplicationStatus
 from src.database.database import get_session
 from src.database.models import Application, User, Vacancy
+from src.gui.email_lookup_worker import EmailLookupWorker
 
 COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta", "E-mail"]
 COLUMN_WIDTHS = {2: 70, 3: 150, 4: 100, 5: 160}
@@ -44,6 +45,8 @@ class ApplicationsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self.table)
+
+        self._email_workers: list[EmailLookupWorker] = []
 
         self.refresh()
 
@@ -96,20 +99,53 @@ class ApplicationsTab(QWidget):
             application.status = ApplicationStatus(status_value)
 
     def _draft_email(self, application_id: int) -> None:
+        button = self.sender()
+
+        with get_session() as session:
+            vacancy = session.get(Vacancy, session.get(Application, application_id).vacancy_id)
+            company = vacancy.company
+            title = vacancy.title
+            existing_email = vacancy.contact_email
+
+        if existing_email:
+            self._confirm_and_draft(application_id, existing_email)
+            return
+
+        if isinstance(button, QPushButton):
+            button.setEnabled(False)
+            button.setText("Buscando e-mail...")
+
+        worker = EmailLookupWorker(company, title)
+        worker.finished_ok.connect(
+            lambda email, app_id=application_id, btn=button: self._on_email_found(app_id, email, btn)
+        )
+        self._email_workers.append(worker)
+        worker.start()
+
+    def _on_email_found(self, application_id: int, email: str, button: QPushButton | None) -> None:
+        if isinstance(button, QPushButton):
+            button.setEnabled(True)
+            button.setText("Criar rascunho")
+
+        self._confirm_and_draft(application_id, email)
+
+    def _confirm_and_draft(self, application_id: int, suggested_email: str) -> None:
         with get_session() as session:
             application = session.get(Application, application_id)
             vacancy = session.get(Vacancy, application.vacancy_id)
             user = session.get(User, application.user_id)
 
-            to_email = vacancy.contact_email
-            if not to_email:
-                to_email, ok = QInputDialog.getText(
-                    self, "E-mail de contato", f"E-mail para candidatura em {vacancy.company}:"
-                )
-                if not ok or not to_email.strip():
-                    return
-                to_email = to_email.strip()
-                vacancy.contact_email = to_email
+            to_email, ok = QInputDialog.getText(
+                self,
+                "E-mail de contato",
+                f"E-mail para candidatura em {vacancy.company}:"
+                + ("" if suggested_email else "\n(nao encontrado automaticamente, digite manualmente)"),
+                text=suggested_email,
+            )
+            if not ok or not to_email.strip():
+                return
+            to_email = to_email.strip()
+            vacancy.contact_email = to_email
 
             try:
                 from src.integrations.outlook import draft_application_email
