@@ -14,8 +14,9 @@ BASE_URL = "https://www.infojobs.com.br"
 LISTING_URL = f"{BASE_URL}/empregos.aspx"
 
 
-def fetch_jobs() -> list[BeautifulSoup]:
-    response = requests.get(LISTING_URL, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+def fetch_jobs(query: str | None = None) -> list[BeautifulSoup]:
+    params = {"palabra": query} if query else None
+    response = requests.get(LISTING_URL, params=params, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     return soup.select("div.js_rowCard[data-id]")
@@ -45,8 +46,8 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
     }
 
 
-def sync_vacancies(session: Session) -> int:
-    cards = fetch_jobs()
+def sync_vacancies(session: Session, query: str | None = None) -> int:
+    cards = fetch_jobs(query)
     created = 0
 
     for card in cards:

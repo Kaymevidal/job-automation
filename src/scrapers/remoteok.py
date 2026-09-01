@@ -14,8 +14,8 @@ REQUEST_HEADERS = {"User-Agent": "job-automation-pro (+https://github.com/)"}
 REQUEST_TIMEOUT = 15
 
 
-def fetch_jobs(tag: str | None = None) -> list[dict]:
-    params = {"tag": tag} if tag else None
+def fetch_jobs(query: str | None = None) -> list[dict]:
+    params = {"tag": query} if query else None
     response = requests.get(API_URL, params=params, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     return [item for item in response.json() if "id" in item]
@@ -54,8 +54,8 @@ def parse_vacancy(record: dict) -> dict:
     }
 
 
-def sync_vacancies(session: Session, tag: str | None = None) -> int:
-    records = fetch_jobs(tag)
+def sync_vacancies(session: Session, query: str | None = None) -> int:
+    records = fetch_jobs(query)
     created = 0
 
     for record in records:

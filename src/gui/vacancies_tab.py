@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -17,6 +18,7 @@ from sqlalchemy import or_, select
 from src.core.constants import ScraperSource
 from src.database.database import get_session
 from src.database.models import Vacancy
+from src.gui.search_worker import SearchWorker
 
 COLUMNS = ["Titulo", "Empresa", "Local", "Fonte", "Score", "Abrir"]
 COLUMN_WIDTHS = {2: 160, 3: 100, 4: 70, 5: 85}
@@ -46,9 +48,15 @@ class VacanciesTab(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
+        self.search_worker: SearchWorker | None = None
+
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Buscar por titulo, empresa ou local...")
         self.search_edit.textChanged.connect(self.refresh)
+        self.search_edit.returnPressed.connect(self._search_online)
+
+        self.search_button = QPushButton("Buscar Online")
+        self.search_button.clicked.connect(self._search_online)
 
         self.source_combo = QComboBox()
         self.source_combo.addItem("Todas as fontes", None)
@@ -63,6 +71,7 @@ class VacanciesTab(QWidget):
 
         filter_bar = QHBoxLayout()
         filter_bar.addWidget(self.search_edit, 1)
+        filter_bar.addWidget(self.search_button)
         filter_bar.addWidget(self.source_combo)
         filter_bar.addWidget(self.min_score_combo)
 
@@ -127,3 +136,27 @@ class VacanciesTab(QWidget):
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
+
+    def _search_online(self) -> None:
+        term = self.search_edit.text().strip()
+        if not term:
+            return
+
+        if self.search_worker is not None and self.search_worker.isRunning():
+            return
+
+        self.search_button.setEnabled(False)
+        self.search_button.setText("Buscando...")
+
+        self.search_worker = SearchWorker(term)
+        self.search_worker.finished_ok.connect(self._on_search_finished)
+        self.search_worker.start()
+
+    def _on_search_finished(self, success: bool, message: str, created: int) -> None:
+        self.search_button.setEnabled(True)
+        self.search_button.setText("Buscar Online")
+
+        if success:
+            self.refresh()
+        else:
+            QMessageBox.warning(self, "Erro na busca", message)

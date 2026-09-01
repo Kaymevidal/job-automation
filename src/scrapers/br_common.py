@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from src.core.constants import ExperienceLevel
@@ -23,6 +24,12 @@ _LEVEL_KEYWORDS = [
 def _strip_accents(text: str) -> str:
     replacements = str.maketrans("áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ", "aaaaeeiooouc" "AAAAEEIOOOUC")
     return text.translate(replacements)
+
+
+def slugify(text: str) -> str:
+    normalized = _strip_accents(text).lower().strip()
+    normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
+    return normalized.strip("-")
 
 
 def parse_experience_level(text: str | None) -> ExperienceLevel | None:

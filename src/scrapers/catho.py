@@ -8,14 +8,15 @@ from sqlalchemy.orm import Session
 from src.core.constants import ScraperSource
 from src.core.logger import logger
 from src.database.models import Vacancy
-from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, parse_experience_level
+from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, parse_experience_level, slugify
 
 BASE_URL = "https://www.catho.com.br"
-LISTING_URL = f"{BASE_URL}/vagas/"
+DEFAULT_LISTING_URL = f"{BASE_URL}/vagas/"
 
 
-def fetch_jobs() -> list[BeautifulSoup]:
-    response = requests.get(LISTING_URL, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+def fetch_jobs(query: str | None = None) -> list[BeautifulSoup]:
+    url = f"{BASE_URL}/vagas/{slugify(query)}/" if query else DEFAULT_LISTING_URL
+    response = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
     return soup.select("li[data-offer-item]")
@@ -56,8 +57,8 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
     }
 
 
-def sync_vacancies(session: Session) -> int:
-    cards = fetch_jobs()
+def sync_vacancies(session: Session, query: str | None = None) -> int:
+    cards = fetch_jobs(query)
     created = 0
 
     for card in cards:
