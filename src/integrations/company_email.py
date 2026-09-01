@@ -185,14 +185,19 @@ def choose_best_email(company: str, vacancy_title: str, candidates: list[dict]) 
         for c in candidates
     )
     prompt = f"""A candidate is applying for the job "{vacancy_title}" at "{company}". Below are email \
-addresses found while searching the web for this company's contact information, ranked with the most \
+addresses found while searching for this company's contact information, ranked with the most \
 promising ones first (a mailto link on the company's own page is the strongest signal; addresses like \
-rh@, vagas@, recrutamento@, carreiras@ are also strong signals).
+rh@, vagas@, recrutamento@, carreiras@, or a "department=hr"/"department=recruiting" tag are also \
+strong signals).
 
 {listing}
 
 Pick the single email most likely to be the right contact for a job application (HR, recruiting, \
-or a general company contact). Avoid personal-looking addresses unrelated to the company and avoid \
+or a general company contact). Do NOT pick a named individual's personal address (e.g. a CEO, \
+director, or other executive/management contact) just because it has high confidence or belongs to \
+the company - sending an unsolicited job application to a specific executive's personal inbox is \
+inappropriate and not what a job seeker would do; only pick a personal address if it is explicitly \
+labeled as HR/recruiting. Avoid personal-looking addresses unrelated to the company and avoid \
 third-party sites unless they are clearly listing this company's own contact. If none of them look \
 like a plausible fit, return null for email."""
 

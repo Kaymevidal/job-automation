@@ -6,7 +6,7 @@ from src.core.logger import logger
 API_URL = "https://api.hunter.io/v2/domain-search"
 REQUEST_TIMEOUT = 15
 
-RELEVANT_DEPARTMENTS = {"hr", "recruiting", "management", "executive"}
+RELEVANT_DEPARTMENTS = {"hr", "recruiting"}
 
 
 def is_configured() -> bool:
@@ -45,11 +45,16 @@ def search_company_emails(company: str, domain: str | None = None) -> list[dict]
             "context": f"type={entry.get('type')}, department={entry.get('department')}, "
                        f"position={entry.get('position')}, confidence={entry.get('confidence')}",
             "department": entry.get("department"),
+            "type": entry.get("type"),
             "confidence": entry.get("confidence") or 0,
         })
 
     candidates.sort(
-        key=lambda c: (c["department"] in RELEVANT_DEPARTMENTS, c["confidence"]),
+        key=lambda c: (
+            c["department"] in RELEVANT_DEPARTMENTS,
+            c["type"] == "generic",
+            c["confidence"],
+        ),
         reverse=True,
     )
     return candidates
