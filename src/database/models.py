@@ -23,6 +23,7 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     experience_level: Mapped[ExperienceLevel | None] = mapped_column(nullable=True)
     resume_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    profile_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 

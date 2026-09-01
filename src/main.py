@@ -1,9 +1,13 @@
 import sys
 
+from sqlalchemy import select
+
 from src.core.config import APP_NAME, APP_VERSION
 from src.core.logger import log_startup, logger
 from src.database.database import check_connection, get_session
 from src.database.migrations import check_database_status, run_migrations
+from src.database.models import User
+from src.scoring.compatibility import score_pending_vacancies
 from src.scrapers.remoteok import sync_vacancies
 
 
@@ -21,6 +25,13 @@ def main() -> int:
 
     with get_session() as session:
         sync_vacancies(session)
+
+    with get_session() as session:
+        users = session.execute(select(User)).scalars().all()
+        if not users:
+            logger.info("No users registered yet, skipping compatibility scoring")
+        for user in users:
+            score_pending_vacancies(session, user)
 
     logger.info(f"{APP_NAME} v{APP_VERSION} finished")
     return 0
