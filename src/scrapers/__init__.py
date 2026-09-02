@@ -5,6 +5,7 @@ from src.core.logger import logger
 
 def sync_all(session: Session, query: str | None = None, pages: int = 1) -> int:
     from src.scrapers import catho, infojobs, remoteok, vagascombr
+    from src.scrapers.dedup import deduplicate_vacancies
 
     paginated_modules = (vagascombr, catho)
 
@@ -17,5 +18,10 @@ def sync_all(session: Session, query: str | None = None, pages: int = 1) -> int:
                 total += module.sync_vacancies(session, query)
         except Exception as e:
             logger.error(f"{module.__name__}: sync failed: {e}")
+
+    try:
+        deduplicate_vacancies(session)
+    except Exception as e:
+        logger.error(f"deduplication failed: {e}")
 
     return total

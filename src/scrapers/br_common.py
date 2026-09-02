@@ -59,6 +59,26 @@ def slugify(text: str) -> str:
     return normalized.strip("-")
 
 
+_COMPANY_SUFFIXES = {"ltda", "sa", "eireli", "mei", "epp", "me", "sociedade"}
+GENERIC_COMPANY_NAMES = {
+    "confidencial", "empresa confidencial", "nao informado", "not informed", "",
+}
+
+
+def normalize_for_dedup(text: str) -> str:
+    normalized = _strip_accents(text or "").lower()
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    words = [w for w in normalized.split() if w not in _COMPANY_SUFFIXES]
+    return " ".join(words)
+
+
+def normalize_city_for_dedup(location: str | None) -> str:
+    if not location:
+        return ""
+    city = re.split(r"[/,-]", location)[0]
+    return normalize_for_dedup(city)
+
+
 def parse_experience_level(text: str | None) -> ExperienceLevel | None:
     if not text:
         return None

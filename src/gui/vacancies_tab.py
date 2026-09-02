@@ -2,6 +2,7 @@ from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
@@ -83,12 +84,16 @@ class VacanciesTab(QWidget):
             self.work_mode_combo.addItem(label, mode)
         self.work_mode_combo.currentIndexChanged.connect(self.refresh)
 
+        self.show_duplicates_check = QCheckBox("Mostrar duplicatas")
+        self.show_duplicates_check.stateChanged.connect(self.refresh)
+
         filter_bar = QHBoxLayout()
         filter_bar.addWidget(self.search_edit, 1)
         filter_bar.addWidget(self.search_button)
         filter_bar.addWidget(self.source_combo)
         filter_bar.addWidget(self.work_mode_combo)
         filter_bar.addWidget(self.min_score_combo)
+        filter_bar.addWidget(self.show_duplicates_check)
 
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
@@ -134,6 +139,9 @@ class VacanciesTab(QWidget):
                 )
 
             query = select(Vacancy)
+
+            if not self.show_duplicates_check.isChecked():
+                query = query.where(Vacancy.duplicate_of_id.is_(None))
 
             search_text = self.search_edit.text().strip()
             if search_text:

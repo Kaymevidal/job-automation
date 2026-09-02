@@ -83,7 +83,9 @@ def score_pending_vacancies(session: Session, user: User, limit: int = 20) -> in
         return 0
 
     pending = session.execute(
-        select(Vacancy).where(Vacancy.compatibility_score.is_(None)).limit(limit)
+        select(Vacancy)
+        .where(Vacancy.compatibility_score.is_(None), Vacancy.duplicate_of_id.is_(None))
+        .limit(limit)
     ).scalars().all()
 
     scored = 0

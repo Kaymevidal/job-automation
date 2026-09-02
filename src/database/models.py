@@ -50,6 +50,7 @@ class Vacancy(Base):
     compatibility_score: Mapped[float | None] = mapped_column(nullable=True)
     posted_at: Mapped[datetime | None] = mapped_column(nullable=True)
     scraped_at: Mapped[datetime] = mapped_column(default=utcnow)
+    duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("vacancies.id"), nullable=True)
 
     applications: Mapped[list["Application"]] = relationship(back_populates="vacancy")
 
