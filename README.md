@@ -1,24 +1,39 @@
 # Job Automation Pro
 
-Desktop application for automating the job application workflow: scraping job
-postings, scoring their compatibility against a candidate profile using a
-local LLM, generating tailored application documents, and tracking
-applications through a scheduler.
+Desktop application that helps a job seeker find and shortlist vacancies
+that actually match their profile: it scrapes postings from several job
+boards, deduplicates them across sources, scores compatibility against a
+candidate profile using a local LLM (Ollama), and can tailor a resume
+per application. It does not contact anyone on the candidate's behalf —
+see [Status](#status) for what is and isn't automated.
+
+## Download (Windows)
+
+Grab `JobAutomationPro.exe` from the
+[Releases page](../../releases) — no Python or pip install required.
+
+Before running it, install [Ollama](https://ollama.com) (used for
+compatibility scoring and resume tailoring) and pull a model:
+
+```
+ollama pull gemma2:9b
+```
+
+Then just double-click `JobAutomationPro.exe`. It creates a `data/` and
+`logs/` folder next to itself on first run — nothing else to configure.
+Fill in the Perfil tab (profile) before using the scoring/resume features.
 
 ## Architecture
 
-The system is split into two runtimes:
+The GUI (`src/gui_main.py`) is the primary way to run this app; a separate
+headless worker (`src/main.py`) can also run the same sync+score pipeline
+in Docker, driven by `docker-compose.yml` — useful for scheduled/unattended
+runs, but not required to use the app.
 
-- **Host (Windows)** — the PyQt6 desktop GUI and Outlook integration
-  (`pywin32`), which cannot run inside a Linux container.
-- **Container (Docker)** — a headless worker that talks to Ollama, runs
-  scraping and scoring jobs, generates documents, and persists everything to
-  a shared SQLite database.
-
-Both runtimes share the same codebase under `src/` and the same database.
-The scraper, scoring, and document generation modules are plain functions
-over a SQLAlchemy session with no Docker-specific dependency, so the GUI
-calls them directly instead of duplicating logic.
+Both entrypoints share the same codebase under `src/`. The scraper,
+scoring, and document modules are plain functions over a SQLAlchemy
+session with no Docker-specific dependency, so the GUI calls them
+directly instead of duplicating logic.
 
 ```
 src/
@@ -29,86 +44,79 @@ src/
   database/
     models.py          SQLAlchemy models
     database.py         Engine, session management
-    migrations.py        Schema creation and status checks
+    migrations.py        Schema creation and auto column migration
   scrapers/
-    remoteok.py           Fetches and persists vacancies from the RemoteOK API
+    remoteok.py           RemoteOK API (remote/tech)
+    vagascombr.py          vagas.com.br (all industries, BR)
+    infojobs.py             InfoJobs (all industries, BR)
+    catho.py                  Catho (all industries, BR)
+    dedup.py                    Cross-source duplicate detection
   scoring/
-    compatibility.py       Keyword pre-filter + Ollama compatibility scoring
+    compatibility.py       Keyword pre-filter + Ollama scoring + work mode
   documents/
-    cover_letter.py         Ollama cover letter generation, rendered to PDF
+    resume_tailor.py       Ollama resume tailoring, rendered to .docx
+    applications.py          get_or_create_application
   gui/
     main_window.py           Tabs: Vagas, Candidaturas, Perfil
-    pipeline.py                Runs sync -> score -> generate on a QThread
+    pipeline.py                Runs sync -> score on a QThread
   main.py                Headless worker entrypoint (Docker)
-  gui_main.py            Desktop GUI entrypoint (Windows host)
+  gui_main.py            Desktop GUI entrypoint (Windows host / the .exe)
 ```
 
 ## Data model
 
-- `User` — candidate profile, including `profile_summary` (free text used
-  for compatibility scoring)
-- `Vacancy` — a scraped job posting: source, tags, description, and
-  `compatibility_score`
-- `Application` — the link between a user and a vacancy, with status and
-  the generated cover letter path
+- `User` — candidate profile: `profile_summary`, `skills`, `desired_roles`,
+  `salary_expectation`, `languages`, LinkedIn/portfolio URLs, and
+  `resume_path` (a `.docx` file the app can tailor per application)
+- `Vacancy` — a scraped job posting: source, tags, description, work mode,
+  `compatibility_score`, and `duplicate_of_id` for cross-source dedup
+- `Application` — the link between a user and a vacancy, created only when
+  the user opens the posting from the Vagas tab; tracks status and the
+  tailored resume path
 - `SchedulerJob` — scheduled/recurring jobs tracked by APScheduler (not
   wired up yet; the pipeline currently runs on demand)
 
-## Requirements
+## Building the .exe yourself
 
-- Docker and Docker Compose
-- Python 3.12 (for running the GUI natively on Windows)
-- [Ollama](https://ollama.com) model pulled locally, e.g. `gemma2:9b`
+```
+pip install -r requirements-build.txt
+pyinstaller JobAutomationPro.spec
+```
 
-## Setup
+The result is `dist/JobAutomationPro.exe`, a single file with no external
+Python dependency. `.github/workflows/build-exe.yml` builds and attaches
+it to a GitHub Release automatically whenever a `v*` tag is pushed.
 
-1. Copy the environment template:
+## Running the Docker worker (optional)
 
-   ```
-   cp .env.example .env
-   ```
+1. Copy the environment template: `cp .env.example .env`
+2. `docker compose up -d` — starts Ollama and runs the worker once
+   against it. The worker container exits after a single run
+   (`restart: "no"`); rerun with `docker compose up job-automation`
+   as needed. It shares the same `data/job_automation.db` as the GUI
+   if run from the same folder.
 
-2. Build and start the stack:
+## Local development
 
-   ```
-   docker compose up -d
-   ```
-
-   This starts the Ollama server and runs the worker once against it. The
-   worker container exits after a single run (`restart: "no"`); rerun with
-   `docker compose up job-automation` as needed.
-
-3. For local (non-Docker) development on Windows, install the full
-   dependency set and run the import check:
-
-   ```
-   pip install -r requirements.txt
-   python test_imports.py
-   ```
-
-4. Launch the desktop GUI (Windows host, requires PyQt6 from step 3):
-
-   ```
-   python -m src.gui_main
-   ```
-
-   Fill in the Perfil tab (name, email, and profile_summary) first — the
-   scoring step skips users with no profile_summary. The Vagas and
-   Candidaturas tabs read from the same database the Docker worker writes
-   to, so either side can run the pipeline.
+```
+pip install -r requirements.txt
+python test_imports.py
+python -m src.gui_main
+```
 
 ## Dependencies
 
-Two requirement files exist because the GUI and Outlook integration only
-run on Windows:
+Two requirement files exist because the GUI only runs on Windows:
 
 - `requirements.txt` — full set, used for native Windows development
-  (includes PyQt6 and pywin32)
+  and for building the `.exe`
 - `requirements-docker.txt` — headless subset used by the Docker image
+- `requirements-build.txt` — `requirements.txt` plus PyInstaller
 
 ## Configuration
 
-Environment variables (see `.env.example`):
+Environment variables (see `.env.example`), read from `.env` next to the
+project root (or next to the `.exe` when running the packaged build):
 
 | Variable          | Description                              | Default                                  |
 |-------------------|-------------------------------------------|-------------------------------------------|
@@ -121,17 +129,29 @@ Environment variables (see `.env.example`):
 
 ## Status
 
-End-to-end pipeline working: RemoteOK scraping, keyword pre-filter +
-Ollama compatibility scoring, cover letter generation (PDF), and a PyQt6
-GUI to review vacancies, manage application status, and edit the profile.
+Working: multi-source scraping (RemoteOK, vagas.com.br, InfoJobs, Catho)
+with pagination and cross-source deduplication, keyword pre-filter +
+Ollama compatibility scoring (with work-mode classification), resume
+tailoring per application, and a PyQt6 GUI covering all of it.
+
+By design, not automated:
+
+- The app never contacts a company or sends anything on the candidate's
+  behalf — a prior version could find a company's email and draft an
+  Outlook message; this was removed due to LGPD/privacy concerns around
+  scraping and storing personal email addresses. An `Application` row
+  now only exists because the user actually opened that posting to apply.
+- No cover letter generation (removed alongside the email feature, since
+  it existed to accompany an emailed application).
 
 Known gaps:
 
-- Only one scraper source (RemoteOK); LinkedIn/Indeed/Glassdoor are
-  defined in `ScraperSource` but not implemented — Indeed in particular
-  sits behind a Cloudflare challenge that blocks plain HTTP scraping.
-- No resume generation, only cover letters — `resume_path` is a file the
-  user provides, not something the app builds.
-- `SchedulerJob`/APScheduler are not wired up; the pipeline runs only when
-  triggered (`docker compose up` or the GUI button).
+- LinkedIn/Indeed/Glassdoor are defined in `ScraperSource` but not
+  implemented — Indeed sits behind a Cloudflare challenge, LinkedIn was
+  ruled out due to its Terms of Service.
+- Resume tailoring only supports `.docx`; PDF resumes are left as-is
+  (no PDF text-extraction dependency yet).
+- `SchedulerJob`/APScheduler are not wired up; the pipeline runs only
+  when triggered (`docker compose up`, or the GUI's "Buscar e Processar
+  Vagas" / per-vacancy buttons).
 - Single local user only; the GUI's Perfil tab edits one profile row.

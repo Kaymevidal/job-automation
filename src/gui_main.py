@@ -7,7 +7,10 @@ from src.core.logger import log_startup
 from src.database.migrations import run_migrations
 from src.gui.main_window import MainWindow
 
-STYLE_PATH = Path(__file__).resolve().parent / "gui" / "style.qss"
+if getattr(sys, "frozen", False):
+    STYLE_PATH = Path(sys._MEIPASS) / "src" / "gui" / "style.qss"
+else:
+    STYLE_PATH = Path(__file__).resolve().parent / "gui" / "style.qss"
 
 
 def main() -> int:

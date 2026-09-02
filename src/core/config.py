@@ -1,9 +1,16 @@
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+if getattr(sys, "frozen", False):
+    # Running as a PyInstaller-built executable: keep data next to the .exe
+    # instead of the temporary extraction directory, so it survives restarts.
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
 load_dotenv(BASE_DIR / ".env")
 
 APP_NAME = "Job Automation Pro"
