@@ -24,5 +24,3 @@ OLLAMA_HOST = os.getenv("OLLAMA_BASE_URL", os.getenv("OLLAMA_HOST", "http://loca
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2:9b")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-
-HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", "")

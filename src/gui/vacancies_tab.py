@@ -20,11 +20,10 @@ from src.database.database import get_session
 from src.database.models import Application, User, Vacancy
 from src.documents.cover_letter import get_or_create_application
 from src.gui.cover_letter_worker import CoverLetterWorker
-from src.gui.email_draft_controller import EmailDraftController
 from src.gui.search_worker import SearchWorker
 
-COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Abrir", "Candidatura", "Rascunho"]
-COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 85, 7: 140, 8: 160}
+COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Abrir", "Candidatura", "Carta"]
+COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 85, 7: 140, 8: 130}
 
 SOURCE_LABELS = {
     ScraperSource.REMOTEOK: "RemoteOK",
@@ -110,8 +109,6 @@ class VacanciesTab(QWidget):
         layout.addLayout(filter_bar)
         layout.addWidget(self.table)
 
-        self._draft_controller = EmailDraftController(self)
-        self._draft_controller.finished.connect(lambda _success: self.refresh())
         self._cover_letter_workers: list[CoverLetterWorker] = []
 
         self.refresh()
@@ -120,10 +117,19 @@ class VacanciesTab(QWidget):
         with get_session() as session:
             user = session.execute(select(User)).scalars().first()
             applied_vacancy_ids = set()
+            lettered_vacancy_ids = set()
             if user is not None:
                 applied_vacancy_ids = set(
                     session.execute(
                         select(Application.vacancy_id).where(Application.user_id == user.id)
+                    ).scalars().all()
+                )
+                lettered_vacancy_ids = set(
+                    session.execute(
+                        select(Application.vacancy_id).where(
+                            Application.user_id == user.id,
+                            Application.cover_letter_text.is_not(None),
+                        )
                     ).scalars().all()
                 )
 
@@ -177,12 +183,13 @@ class VacanciesTab(QWidget):
                 )
                 self.table.setCellWidget(row, 7, apply_button)
 
-                draft_button = QPushButton("Gerar Rascunho")
-                draft_button.setEnabled(user is not None)
-                draft_button.clicked.connect(
-                    lambda _checked, vacancy_id=vacancy.id: self._generate_draft(vacancy_id)
+                has_letter = vacancy.id in lettered_vacancy_ids
+                letter_button = QPushButton("Carta gerada" if has_letter else "Gerar Carta")
+                letter_button.setEnabled(user is not None and not has_letter)
+                letter_button.clicked.connect(
+                    lambda _checked, vacancy_id=vacancy.id: self._generate_cover_letter(vacancy_id)
                 )
-                self.table.setCellWidget(row, 8, draft_button)
+                self.table.setCellWidget(row, 8, letter_button)
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
@@ -227,7 +234,7 @@ class VacanciesTab(QWidget):
             button.setText("Ja adicionada")
             button.setEnabled(False)
 
-    def _generate_draft(self, vacancy_id: int) -> None:
+    def _generate_cover_letter(self, vacancy_id: int) -> None:
         button = self.sender()
 
         with get_session() as session:
@@ -242,32 +249,24 @@ class VacanciesTab(QWidget):
             vacancy = session.get(Vacancy, vacancy_id)
             application = get_or_create_application(session, user, vacancy)
             application_id = application.id
-            has_letter = bool(application.cover_letter_text)
 
         if isinstance(button, QPushButton):
             button.setEnabled(False)
             button.setText("Gerando carta...")
 
-        if has_letter:
-            self._on_cover_letter_ready(True, "", application_id, button)
-            return
-
         worker = CoverLetterWorker(application_id)
         worker.finished_ok.connect(
-            lambda success, message, app_id=application_id, btn=button:
-            self._on_cover_letter_ready(success, message, app_id, btn)
+            lambda success, message, btn=button: self._on_cover_letter_ready(success, message, btn)
         )
         self._cover_letter_workers.append(worker)
         worker.start()
 
-    def _on_cover_letter_ready(
-        self, success: bool, message: str, application_id: int, button: QPushButton | None
-    ) -> None:
+    def _on_cover_letter_ready(self, success: bool, message: str, button: QPushButton | None) -> None:
         if not success:
             if isinstance(button, QPushButton):
                 button.setEnabled(True)
-                button.setText("Gerar Rascunho")
+                button.setText("Gerar Carta")
             QMessageBox.critical(self, "Erro ao gerar carta", message)
             return
 
-        self._draft_controller.start(application_id, button)
+        self.refresh()

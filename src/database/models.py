@@ -40,7 +40,6 @@ class Vacancy(Base):
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     work_mode: Mapped[WorkMode | None] = mapped_column(nullable=True)
     url: Mapped[str] = mapped_column(String(1000))
-    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source: Mapped[ScraperSource] = mapped_column()
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -68,7 +67,6 @@ class Application(Base):
     resume_used_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     applied_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    email_drafted_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 

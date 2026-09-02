@@ -17,10 +17,9 @@ from sqlalchemy import select
 from src.core.constants import ApplicationStatus
 from src.database.database import get_session
 from src.database.models import Application, Vacancy
-from src.gui.email_draft_controller import EmailDraftController
 
-COLUMNS = ["Vaga", "Empresa", "Score", "Status", "E-mail", "Carta", "Curriculo", "Rascunho"]
-COLUMN_WIDTHS = {2: 70, 3: 130, 4: 190, 5: 100, 6: 100, 7: 160}
+COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta", "Curriculo"]
+COLUMN_WIDTHS = {2: 70, 3: 130, 4: 100, 5: 100}
 
 
 class ApplicationsTab(QWidget):
@@ -43,9 +42,6 @@ class ApplicationsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self.table)
-
-        self._draft_controller = EmailDraftController(self)
-        self._draft_controller.finished.connect(lambda _success: self.refresh())
 
         self.refresh()
 
@@ -73,32 +69,23 @@ class ApplicationsTab(QWidget):
                 )
                 self.table.setCellWidget(row, 3, status_combo)
 
-                self.table.setItem(row, 4, QTableWidgetItem(vacancy.contact_email or "-"))
-
                 if application.cover_letter_path:
                     letter_button = QPushButton("Abrir PDF")
                     letter_button.clicked.connect(
                         lambda _checked, path=application.cover_letter_path: self._open_file(path)
                     )
-                    self.table.setCellWidget(row, 5, letter_button)
+                    self.table.setCellWidget(row, 4, letter_button)
                 else:
-                    self.table.setItem(row, 5, QTableWidgetItem("-"))
+                    self.table.setItem(row, 4, QTableWidgetItem("-"))
 
                 if application.resume_used_path:
                     resume_button = QPushButton("Abrir CV")
                     resume_button.clicked.connect(
                         lambda _checked, path=application.resume_used_path: self._open_file(path)
                     )
-                    self.table.setCellWidget(row, 6, resume_button)
+                    self.table.setCellWidget(row, 5, resume_button)
                 else:
-                    self.table.setItem(row, 6, QTableWidgetItem("-"))
-
-                email_label = "Rascunho criado" if application.email_drafted_at else "Criar rascunho"
-                email_button = QPushButton(email_label)
-                email_button.clicked.connect(
-                    lambda _checked, app_id=application.id: self._draft_email(app_id)
-                )
-                self.table.setCellWidget(row, 7, email_button)
+                    self.table.setItem(row, 5, QTableWidgetItem("-"))
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
@@ -107,10 +94,6 @@ class ApplicationsTab(QWidget):
         with get_session() as session:
             application = session.get(Application, application_id)
             application.status = ApplicationStatus(status_value)
-
-    def _draft_email(self, application_id: int) -> None:
-        button = self.sender()
-        self._draft_controller.start(application_id, button if isinstance(button, QPushButton) else None)
 
     @staticmethod
     def _open_file(path: str) -> None:
