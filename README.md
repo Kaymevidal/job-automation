@@ -100,7 +100,6 @@ it to a GitHub Release automatically whenever a `v*` tag is pushed.
 
 ```
 pip install -r requirements.txt
-python test_imports.py
 python -m src.gui_main
 ```
 

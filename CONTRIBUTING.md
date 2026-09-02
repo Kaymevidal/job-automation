@@ -7,7 +7,6 @@ open-source project, so the process is intentionally lightweight.
 
 ```
 pip install -r requirements.txt
-python test_imports.py
 python -m src.gui_main
 ```
 
@@ -39,8 +38,8 @@ will not be merged; if you want to discuss it, open an issue first.
 - **Match the existing style.** No comments unless they explain a
   non-obvious *why* (a workaround, a hidden constraint) - the code itself
   should explain the *what*. No emojis anywhere in code, logs, or the UI.
-- **Run `python test_imports.py`** before opening the PR, and manually
-  exercise whatever you changed in the GUI if it touches `src/gui/`.
+- **Run the app** (`python -m src.gui_main`) before opening the PR and
+  manually exercise whatever you changed.
 
 ## Reporting bugs / proposing features
 
