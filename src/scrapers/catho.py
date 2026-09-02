@@ -8,18 +8,35 @@ from sqlalchemy.orm import Session
 from src.core.constants import ScraperSource
 from src.core.logger import logger
 from src.database.models import Vacancy
-from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, detect_work_mode, parse_experience_level, slugify
+from src.scrapers.br_common import (
+    REQUEST_HEADERS,
+    REQUEST_TIMEOUT,
+    detect_work_mode,
+    fetch_full_description,
+    parse_experience_level,
+    slugify,
+)
 
 BASE_URL = "https://www.catho.com.br"
 DEFAULT_LISTING_URL = f"{BASE_URL}/vagas/"
+MAX_DETAIL_FETCHES = 30
 
 
-def fetch_jobs(query: str | None = None) -> list[BeautifulSoup]:
+def fetch_jobs(query: str | None = None, pages: int = 1) -> list[BeautifulSoup]:
     url = f"{BASE_URL}/vagas/{slugify(query)}/" if query else DEFAULT_LISTING_URL
-    response = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    return soup.select("li[data-offer-item]")
+    cards = []
+
+    for page in range(1, pages + 1):
+        params = {"page": page} if page > 1 else None
+        response = requests.get(url, params=params, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        page_cards = soup.select("li[data-offer-item]")
+        if not page_cards:
+            break
+        cards.extend(page_cards)
+
+    return cards
 
 
 def _location_text(card: BeautifulSoup) -> str | None:
@@ -58,9 +75,10 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
     }
 
 
-def sync_vacancies(session: Session, query: str | None = None) -> int:
-    cards = fetch_jobs(query)
+def sync_vacancies(session: Session, query: str | None = None, pages: int = 1) -> int:
+    cards = fetch_jobs(query, pages=pages)
     created = 0
+    detail_fetches = 0
 
     for card in cards:
         try:
@@ -81,6 +99,10 @@ def sync_vacancies(session: Session, query: str | None = None) -> int:
 
         if existing is not None:
             continue
+
+        if detail_fetches < MAX_DETAIL_FETCHES:
+            record["description"] = fetch_full_description(record["url"])
+            detail_fetches += 1
 
         session.add(Vacancy(**record))
         created += 1

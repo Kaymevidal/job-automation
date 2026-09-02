@@ -8,10 +8,17 @@ from sqlalchemy.orm import Session
 from src.core.constants import ScraperSource
 from src.core.logger import logger
 from src.database.models import Vacancy
-from src.scrapers.br_common import REQUEST_HEADERS, REQUEST_TIMEOUT, detect_work_mode, parse_experience_level
+from src.scrapers.br_common import (
+    REQUEST_HEADERS,
+    REQUEST_TIMEOUT,
+    detect_work_mode,
+    fetch_full_description,
+    parse_experience_level,
+)
 
 BASE_URL = "https://www.infojobs.com.br"
 LISTING_URL = f"{BASE_URL}/empregos.aspx"
+MAX_DETAIL_FETCHES = 30
 
 
 def fetch_jobs(query: str | None = None) -> list[BeautifulSoup]:
@@ -50,6 +57,7 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
 def sync_vacancies(session: Session, query: str | None = None) -> int:
     cards = fetch_jobs(query)
     created = 0
+    detail_fetches = 0
 
     for card in cards:
         try:
@@ -70,6 +78,10 @@ def sync_vacancies(session: Session, query: str | None = None) -> int:
 
         if existing is not None:
             continue
+
+        if detail_fetches < MAX_DETAIL_FETCHES:
+            record["description"] = fetch_full_description(record["url"])
+            detail_fetches += 1
 
         session.add(Vacancy(**record))
         created += 1

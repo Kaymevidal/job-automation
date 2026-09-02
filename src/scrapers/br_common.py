@@ -1,13 +1,40 @@
+import json
 import re
 from datetime import datetime, timezone
 
+import requests
+from bs4 import BeautifulSoup
+
 from src.core.constants import ExperienceLevel, WorkMode
+from src.core.logger import logger
 
 REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 }
 REQUEST_TIMEOUT = 15
+
+_JSONLD_RE = re.compile(r'application/ld\+json"[^>]*>(.*?)</script>', re.S)
+
+
+def fetch_full_description(url: str) -> str | None:
+    try:
+        response = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+    except Exception as e:
+        logger.warning(f"br_common: failed to fetch detail page {url}: {e}")
+        return None
+
+    for block in _JSONLD_RE.findall(response.text):
+        try:
+            data = json.loads(block)
+        except (ValueError, TypeError):
+            continue
+
+        if isinstance(data, dict) and data.get("@type") == "JobPosting" and data.get("description"):
+            return BeautifulSoup(data["description"], "html.parser").get_text(separator="\n").strip()
+
+    return None
 
 _LEVEL_KEYWORDS = [
     ("estagio", ExperienceLevel.INTERN),

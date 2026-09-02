@@ -21,12 +21,21 @@ BASE_URL = "https://www.vagas.com.br"
 DEFAULT_LISTING_URL = f"{BASE_URL}/vagas-de-todas-as-areas"
 
 
-def fetch_jobs(query: str | None = None) -> list[BeautifulSoup]:
+def fetch_jobs(query: str | None = None, pages: int = 1) -> list[BeautifulSoup]:
     url = f"{BASE_URL}/vagas-de-{slugify(query)}" if query else DEFAULT_LISTING_URL
-    response = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    return soup.select("li.vaga")
+    cards = []
+
+    for page in range(1, pages + 1):
+        params = {"pagina": page} if page > 1 else None
+        response = requests.get(url, params=params, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        page_cards = soup.select("li.vaga")
+        if not page_cards:
+            break
+        cards.extend(page_cards)
+
+    return cards
 
 
 def parse_vacancy(card: BeautifulSoup) -> dict | None:
@@ -59,8 +68,8 @@ def parse_vacancy(card: BeautifulSoup) -> dict | None:
     }
 
 
-def sync_vacancies(session: Session, query: str | None = None) -> int:
-    cards = fetch_jobs(query)
+def sync_vacancies(session: Session, query: str | None = None, pages: int = 1) -> int:
+    cards = fetch_jobs(query, pages=pages)
     created = 0
 
     for card in cards:
