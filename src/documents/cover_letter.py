@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 from ollama import Client
@@ -13,6 +12,8 @@ from src.core.config import COVER_LETTERS_DIR, OLLAMA_HOST, OLLAMA_MODEL
 from src.core.constants import ApplicationStatus, MIN_COMPATIBILITY_SCORE
 from src.core.logger import logger
 from src.database.models import Application, User, Vacancy
+from src.documents.resume_tailor import tailor_resume_for_application
+from src.documents.utils import looks_broken, safe_filename
 
 _client = Client(host=OLLAMA_HOST)
 
@@ -36,12 +37,6 @@ Only state facts grounded in the candidate profile and job description above. Ne
 placeholder text or bracketed instructions like "[mention X]" - if you lack a specific \
 detail, write the sentence generically instead of leaving a placeholder."""
 
-_BROKEN_MARKERS = ("[", "]", "{", "}")
-
-
-def _looks_broken(text: str) -> bool:
-    return any(marker in text for marker in _BROKEN_MARKERS)
-
 
 def generate_cover_letter_text(user: User, vacancy: Vacancy) -> str:
     prompt = PROMPT_TEMPLATE.format(
@@ -57,7 +52,7 @@ def generate_cover_letter_text(user: User, vacancy: Vacancy) -> str:
         response = _client.chat(model=OLLAMA_MODEL, messages=messages, options={"temperature": 0.4})
         text = response["message"]["content"].strip()
 
-        if not _looks_broken(text):
+        if not looks_broken(text):
             return text
 
         logger.warning(f"Cover letter for vacancy {vacancy.id} looked broken on attempt {attempt + 1}, retrying")
@@ -72,12 +67,8 @@ def generate_cover_letter_text(user: User, vacancy: Vacancy) -> str:
     raise ValueError(f"Cover letter generation kept producing placeholder text for vacancy {vacancy.id}")
 
 
-def _safe_filename(text: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]+", "_", text).strip("_")[:80]
-
-
 def render_cover_letter_pdf(text: str, vacancy: Vacancy) -> Path:
-    filename = f"{vacancy.id}_{_safe_filename(vacancy.company)}.pdf"
+    filename = f"{vacancy.id}_{safe_filename(vacancy.company)}.pdf"
     output_path = COVER_LETTERS_DIR / filename
 
     doc = SimpleDocTemplate(
@@ -136,6 +127,11 @@ def generate_cover_letter_for_application(session: Session, application: Applica
     session.commit()
     logger.info(f"Cover letter generated for application {application.id}, vacancy {vacancy.id}")
 
+    try:
+        tailor_resume_for_application(session, application)
+    except Exception as e:
+        logger.error(f"Resume tailoring failed for application {application.id}: {e}")
+
 
 def generate_applications_for_top_matches(
     session: Session, user: User, min_score: float = MIN_COMPATIBILITY_SCORE
@@ -156,24 +152,17 @@ def generate_applications_for_top_matches(
         if existing is not None:
             continue
 
+        application = get_or_create_application(session, user, vacancy)
+
         try:
-            letter_text = generate_cover_letter_text(user, vacancy)
-            pdf_path = render_cover_letter_pdf(letter_text, vacancy)
+            generate_cover_letter_for_application(session, application)
         except Exception as e:
             logger.error(f"Cover letter generation failed for vacancy {vacancy.id}: {e}")
+            session.delete(application)
+            session.commit()
             continue
 
-        session.add(Application(
-            user_id=user.id,
-            vacancy_id=vacancy.id,
-            status=ApplicationStatus.PENDING,
-            cover_letter_path=str(pdf_path),
-            cover_letter_text=letter_text,
-            resume_used_path=user.resume_path,
-        ))
-        session.commit()
         created += 1
-        logger.info(f"Application created for vacancy {vacancy.id} ({vacancy.title}), cover letter at {pdf_path}")
 
     logger.info(f"Created {created} applications from {len(candidates)} qualifying vacancies")
     return created
