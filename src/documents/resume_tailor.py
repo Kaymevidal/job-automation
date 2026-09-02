@@ -18,6 +18,10 @@ PROMPT_TEMPLATE = """You are tailoring a candidate's resume for a specific job p
 Current resume (lines starting with "## " are section headings):
 {resume_text}
 
+Additional skills/context confirmed true by the candidate (may not be worded exactly the same \
+way in the resume above, but are real and may be used):
+{known_skills}
+
 They are applying for:
 Title: {title}
 Company: {company}
@@ -31,7 +35,8 @@ supports it.
 
 Rules:
 - Do NOT invent any experience, skill, employer, job title, degree, or achievement that is not \
-already present in the original resume. Only rephrase, reorder, or emphasize existing content.
+already present in the original resume or in the confirmed skills list above. Only rephrase, \
+reorder, or emphasize existing content.
 - Keep the same companies, dates, degrees, and other factual content unchanged.
 - Keep the same output format: section headings on their own line prefixed with "## ", every \
 other line as plain text.
@@ -54,13 +59,13 @@ def _skills_section_lines(text: str) -> list[str]:
     return lines
 
 
-def _find_fabricated_skills(original_text: str, tailored_text: str) -> list[str]:
-    original_lower = original_text.lower()
+def _find_fabricated_skills(original_text: str, tailored_text: str, known_skills: str = "") -> list[str]:
+    allowed_lower = f"{original_text}\n{known_skills}".lower()
     fabricated = []
     for line in _skills_section_lines(tailored_text):
         for item in line.split(","):
             item = item.strip()
-            if item and item.lower() not in original_lower:
+            if item and item.lower() not in allowed_lower:
                 fabricated.append(item)
     return fabricated
 
@@ -83,9 +88,10 @@ def extract_resume_text(path: str) -> str:
     return "\n".join(lines)
 
 
-def generate_tailored_resume_text(resume_text: str, vacancy: Vacancy) -> str:
+def generate_tailored_resume_text(resume_text: str, vacancy: Vacancy, known_skills: str = "") -> str:
     prompt = PROMPT_TEMPLATE.format(
         resume_text=resume_text,
+        known_skills=known_skills or "(none provided)",
         title=vacancy.title,
         company=vacancy.company,
         description=vacancy.description or "(no description provided)",
@@ -96,7 +102,7 @@ def generate_tailored_resume_text(resume_text: str, vacancy: Vacancy) -> str:
         response = _client.chat(model=OLLAMA_MODEL, messages=messages, options={"temperature": 0.3})
         text = response["message"]["content"].strip()
 
-        fabricated = _find_fabricated_skills(resume_text, text)
+        fabricated = _find_fabricated_skills(resume_text, text, known_skills)
         if not looks_broken(text) and not fabricated:
             return text
 
@@ -159,7 +165,7 @@ def tailor_resume_for_application(session: Session, application: Application) ->
         return None
 
     resume_text = extract_resume_text(user.resume_path)
-    tailored_text = generate_tailored_resume_text(resume_text, vacancy)
+    tailored_text = generate_tailored_resume_text(resume_text, vacancy, user.skills or "")
     output_path = render_resume_docx(tailored_text, vacancy)
 
     application.resume_used_path = str(output_path)

@@ -18,13 +18,13 @@ from sqlalchemy import or_, select
 
 from src.core.constants import ScraperSource, WorkMode
 from src.database.database import get_session
-from src.database.models import Application, User, Vacancy
-from src.documents.cover_letter import get_or_create_application
-from src.gui.cover_letter_worker import CoverLetterWorker
+from src.database.models import User, Vacancy
+from src.documents.applications import get_or_create_application
 from src.gui.search_worker import SearchWorker
+from src.gui.vacancy_detail_dialog import VacancyDetailDialog
 
-COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Abrir", "Candidatura", "Carta"]
-COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 85, 7: 140, 8: 130}
+COLUMNS = ["Titulo", "Empresa", "Local", "Modalidade", "Fonte", "Score", "Detalhes", "Abrir"]
+COLUMN_WIDTHS = {2: 150, 3: 100, 4: 100, 5: 70, 6: 90, 7: 85}
 
 SOURCE_LABELS = {
     ScraperSource.REMOTEOK: "RemoteOK",
@@ -114,30 +114,12 @@ class VacanciesTab(QWidget):
         layout.addLayout(filter_bar)
         layout.addWidget(self.table)
 
-        self._cover_letter_workers: list[CoverLetterWorker] = []
+        self._detail_dialog: VacancyDetailDialog | None = None
 
         self.refresh()
 
     def refresh(self) -> None:
         with get_session() as session:
-            user = session.execute(select(User)).scalars().first()
-            applied_vacancy_ids = set()
-            lettered_vacancy_ids = set()
-            if user is not None:
-                applied_vacancy_ids = set(
-                    session.execute(
-                        select(Application.vacancy_id).where(Application.user_id == user.id)
-                    ).scalars().all()
-                )
-                lettered_vacancy_ids = set(
-                    session.execute(
-                        select(Application.vacancy_id).where(
-                            Application.user_id == user.id,
-                            Application.cover_letter_text.is_not(None),
-                        )
-                    ).scalars().all()
-                )
-
             query = select(Vacancy)
 
             if not self.show_duplicates_check.isChecked():
@@ -178,26 +160,17 @@ class VacanciesTab(QWidget):
                 for col, value in enumerate(values):
                     self.table.setItem(row, col, QTableWidgetItem(value))
 
+                details_button = QPushButton("Ver mais")
+                details_button.clicked.connect(
+                    lambda _checked, vacancy_id=vacancy.id: self._show_details(vacancy_id)
+                )
+                self.table.setCellWidget(row, 6, details_button)
+
                 open_button = QPushButton("Abrir")
-                open_button.clicked.connect(lambda _checked, url=vacancy.url: QDesktopServices.openUrl(QUrl(url)))
-                self.table.setCellWidget(row, 6, open_button)
-
-                already_applied = vacancy.id in applied_vacancy_ids
-
-                apply_button = QPushButton("Ja adicionada" if already_applied else "+ Candidatura")
-                apply_button.setEnabled(user is not None and not already_applied)
-                apply_button.clicked.connect(
-                    lambda _checked, vacancy_id=vacancy.id: self._add_to_applications(vacancy_id)
+                open_button.clicked.connect(
+                    lambda _checked, vacancy_id=vacancy.id, url=vacancy.url: self._open_vacancy(vacancy_id, url)
                 )
-                self.table.setCellWidget(row, 7, apply_button)
-
-                has_letter = vacancy.id in lettered_vacancy_ids
-                letter_button = QPushButton("Carta gerada" if has_letter else "Gerar Carta")
-                letter_button.setEnabled(user is not None and not has_letter)
-                letter_button.clicked.connect(
-                    lambda _checked, vacancy_id=vacancy.id: self._generate_cover_letter(vacancy_id)
-                )
-                self.table.setCellWidget(row, 8, letter_button)
+                self.table.setCellWidget(row, 7, open_button)
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
@@ -226,55 +199,19 @@ class VacanciesTab(QWidget):
         else:
             QMessageBox.warning(self, "Erro na busca", message)
 
-    def _add_to_applications(self, vacancy_id: int) -> None:
-        button = self.sender()
+    def _show_details(self, vacancy_id: int) -> None:
+        with get_session() as session:
+            vacancy = session.get(Vacancy, vacancy_id)
+            self._detail_dialog = VacancyDetailDialog(vacancy, self)
+        self._detail_dialog.exec()
+
+    def _open_vacancy(self, vacancy_id: int, url: str) -> None:
+        QDesktopServices.openUrl(QUrl(url))
 
         with get_session() as session:
             user = session.execute(select(User)).scalars().first()
             if user is None:
-                QMessageBox.warning(self, "Sem perfil", "Cadastre seu perfil na aba Perfil primeiro.")
                 return
 
             vacancy = session.get(Vacancy, vacancy_id)
             get_or_create_application(session, user, vacancy)
-
-        if isinstance(button, QPushButton):
-            button.setText("Ja adicionada")
-            button.setEnabled(False)
-
-    def _generate_cover_letter(self, vacancy_id: int) -> None:
-        button = self.sender()
-
-        with get_session() as session:
-            user = session.execute(select(User)).scalars().first()
-            if user is None:
-                QMessageBox.warning(self, "Sem perfil", "Cadastre seu perfil na aba Perfil primeiro.")
-                return
-            if not user.profile_summary:
-                QMessageBox.warning(self, "Perfil incompleto", "Preencha o resumo do perfil antes de gerar a carta.")
-                return
-
-            vacancy = session.get(Vacancy, vacancy_id)
-            application = get_or_create_application(session, user, vacancy)
-            application_id = application.id
-
-        if isinstance(button, QPushButton):
-            button.setEnabled(False)
-            button.setText("Gerando carta...")
-
-        worker = CoverLetterWorker(application_id)
-        worker.finished_ok.connect(
-            lambda success, message, btn=button: self._on_cover_letter_ready(success, message, btn)
-        )
-        self._cover_letter_workers.append(worker)
-        worker.start()
-
-    def _on_cover_letter_ready(self, success: bool, message: str, button: QPushButton | None) -> None:
-        if not success:
-            if isinstance(button, QPushButton):
-                button.setEnabled(True)
-                button.setText("Gerar Carta")
-            QMessageBox.critical(self, "Erro ao gerar carta", message)
-            return
-
-        self.refresh()

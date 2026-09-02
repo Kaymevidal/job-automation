@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QHeaderView,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -14,12 +15,20 @@ from PyQt6.QtWidgets import (
 )
 from sqlalchemy import select
 
+from src.core.config import TAILORED_RESUMES_DIR
 from src.core.constants import ApplicationStatus
 from src.database.database import get_session
-from src.database.models import Application, Vacancy
+from src.database.models import Application, User, Vacancy
+from src.gui.resume_worker import ResumeWorker
 
-COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Carta", "Curriculo"]
-COLUMN_WIDTHS = {2: 70, 3: 130, 4: 100, 5: 100}
+COLUMNS = ["Vaga", "Empresa", "Score", "Status", "Curriculo"]
+COLUMN_WIDTHS = {2: 70, 3: 130, 4: 130}
+
+
+def _is_tailored(resume_used_path: str | None) -> bool:
+    if not resume_used_path:
+        return False
+    return str(TAILORED_RESUMES_DIR) in resume_used_path
 
 
 class ApplicationsTab(QWidget):
@@ -42,6 +51,8 @@ class ApplicationsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(self.table)
+
+        self._resume_workers: list[ResumeWorker] = []
 
         self.refresh()
 
@@ -69,23 +80,18 @@ class ApplicationsTab(QWidget):
                 )
                 self.table.setCellWidget(row, 3, status_combo)
 
-                if application.cover_letter_path:
-                    letter_button = QPushButton("Abrir PDF")
-                    letter_button.clicked.connect(
-                        lambda _checked, path=application.cover_letter_path: self._open_file(path)
-                    )
-                    self.table.setCellWidget(row, 4, letter_button)
-                else:
-                    self.table.setItem(row, 4, QTableWidgetItem("-"))
-
-                if application.resume_used_path:
-                    resume_button = QPushButton("Abrir CV")
+                resume_button = QPushButton()
+                if _is_tailored(application.resume_used_path):
+                    resume_button.setText("Abrir CV")
                     resume_button.clicked.connect(
                         lambda _checked, path=application.resume_used_path: self._open_file(path)
                     )
-                    self.table.setCellWidget(row, 5, resume_button)
                 else:
-                    self.table.setItem(row, 5, QTableWidgetItem("-"))
+                    resume_button.setText("Gerar Curriculo")
+                    resume_button.clicked.connect(
+                        lambda _checked, app_id=application.id: self._generate_resume(app_id)
+                    )
+                self.table.setCellWidget(row, 4, resume_button)
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
@@ -94,6 +100,39 @@ class ApplicationsTab(QWidget):
         with get_session() as session:
             application = session.get(Application, application_id)
             application.status = ApplicationStatus(status_value)
+
+    def _generate_resume(self, application_id: int) -> None:
+        button = self.sender()
+
+        with get_session() as session:
+            application = session.get(Application, application_id)
+            user = session.get(User, application.user_id)
+            if not user.profile_summary:
+                QMessageBox.warning(
+                    self, "Perfil incompleto", "Preencha o resumo do perfil antes de gerar o curriculo."
+                )
+                return
+
+        if isinstance(button, QPushButton):
+            button.setEnabled(False)
+            button.setText("Gerando...")
+
+        worker = ResumeWorker(application_id)
+        worker.finished_ok.connect(
+            lambda success, message, btn=button: self._on_resume_ready(success, message, btn)
+        )
+        self._resume_workers.append(worker)
+        worker.start()
+
+    def _on_resume_ready(self, success: bool, message: str, button: QPushButton | None) -> None:
+        if not success:
+            if isinstance(button, QPushButton):
+                button.setEnabled(True)
+                button.setText("Gerar Curriculo")
+            QMessageBox.critical(self, "Erro ao gerar curriculo", message)
+            return
+
+        self.refresh()
 
     @staticmethod
     def _open_file(path: str) -> None:

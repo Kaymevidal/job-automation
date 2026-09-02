@@ -11,11 +11,9 @@ APP_VERSION = "0.1.0"
 
 DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 LOG_DIR = Path(os.getenv("LOG_DIR", BASE_DIR / "logs"))
-COVER_LETTERS_DIR = DATA_DIR / "cover_letters"
 TAILORED_RESUMES_DIR = DATA_DIR / "tailored_resumes"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-COVER_LETTERS_DIR.mkdir(parents=True, exist_ok=True)
 TAILORED_RESUMES_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'job_automation.db'}")
