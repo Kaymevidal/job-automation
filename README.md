@@ -155,3 +155,14 @@ Known gaps:
   when triggered (`docker compose up`, or the GUI's "Buscar e Processar
   Vagas" / per-vacancy buttons).
 - Single local user only; the GUI's Perfil tab edits one profile row.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup
+instructions and project scope (in particular, what kinds of features won't
+be merged and why). Participation is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE)
