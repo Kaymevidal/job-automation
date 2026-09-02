@@ -19,8 +19,8 @@ from src.database.database import get_session
 from src.database.models import Application, Vacancy
 from src.gui.email_draft_controller import EmailDraftController
 
-COLUMNS = ["Vaga", "Empresa", "Score", "Status", "E-mail", "Carta", "Rascunho"]
-COLUMN_WIDTHS = {2: 70, 3: 130, 4: 190, 5: 100, 6: 160}
+COLUMNS = ["Vaga", "Empresa", "Score", "Status", "E-mail", "Carta", "Curriculo", "Rascunho"]
+COLUMN_WIDTHS = {2: 70, 3: 130, 4: 190, 5: 100, 6: 100, 7: 160}
 
 
 class ApplicationsTab(QWidget):
@@ -84,12 +84,21 @@ class ApplicationsTab(QWidget):
                 else:
                     self.table.setItem(row, 5, QTableWidgetItem("-"))
 
+                if application.resume_used_path:
+                    resume_button = QPushButton("Abrir CV")
+                    resume_button.clicked.connect(
+                        lambda _checked, path=application.resume_used_path: self._open_file(path)
+                    )
+                    self.table.setCellWidget(row, 6, resume_button)
+                else:
+                    self.table.setItem(row, 6, QTableWidgetItem("-"))
+
                 email_label = "Rascunho criado" if application.email_drafted_at else "Criar rascunho"
                 email_button = QPushButton(email_label)
                 email_button.clicked.connect(
                     lambda _checked, app_id=application.id: self._draft_email(app_id)
                 )
-                self.table.setCellWidget(row, 6, email_button)
+                self.table.setCellWidget(row, 7, email_button)
 
             for col, width in COLUMN_WIDTHS.items():
                 self.table.setColumnWidth(col, width)
